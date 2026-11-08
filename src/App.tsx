@@ -244,6 +244,17 @@ function FinanceApp({
   const [editingBusiness, setEditingBusiness] = useState<number | null>(null);
   const [editingBusinessName, setEditingBusinessName] = useState('');
   const [accountName, setAccountName] = useState('');
+  const categoryStorageKey = `hisaab-categories-${user.phone}`;
+  const [expenseCategoryList, setExpenseCategoryList] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`${categoryStorageKey}-expense`) || 'null') || expenseCategories; }
+    catch { return expenseCategories; }
+  });
+  const [incomeCategoryList, setIncomeCategoryList] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(`${categoryStorageKey}-income`) || 'null') || incomeCategories; }
+    catch { return incomeCategories; }
+  });
+  const [editingCategory, setEditingCategory] = useState<{ type: 'expense' | 'income'; original: string } | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
 
   const refresh = async () => {
     const [tx, biz, acc] = await Promise.all([
@@ -699,6 +710,45 @@ function FinanceApp({
       setNotice(`${business.name} deleted.`);
     } catch {
       setNotice('Could not delete business.');
+    }
+  };
+
+  const startCategoryEdit = (type: 'expense' | 'income', name: string) => {
+    setEditingCategory({ type, original: name });
+    setEditingCategoryName(name);
+  };
+
+  const saveCategoryEdit = async () => {
+    if (!editingCategory) return;
+    const name = editingCategoryName.trim();
+    if (!name) { setNotice('Enter a category name.'); return; }
+    const list = editingCategory.type === 'expense' ? expenseCategoryList : incomeCategoryList;
+    if (list.some(item => item.toLowerCase() === name.toLowerCase() && item !== editingCategory.original)) {
+      setNotice('This category already exists.');
+      return;
+    }
+    try {
+      const nextList = list.map(item => item === editingCategory.original ? name : item);
+      if (editingCategory.type === 'expense') {
+        setExpenseCategoryList(nextList);
+        localStorage.setItem(`${categoryStorageKey}-expense`, JSON.stringify(nextList));
+      } else {
+        setIncomeCategoryList(nextList);
+        localStorage.setItem(`${categoryStorageKey}-income`, JSON.stringify(nextList));
+      }
+      const linked = await db.transactions.toArray();
+      for (const tx of linked) {
+        if (tx.type === editingCategory.type && tx.category === editingCategory.original && tx.id) {
+          await db.transactions.update(tx.id, { category: name });
+        }
+      }
+      await saveCloud();
+      await refresh();
+      setEditingCategory(null);
+      setEditingCategoryName('');
+      setNotice('Category updated. Existing transactions were updated too.');
+    } catch {
+      setNotice('Could not update category.');
     }
   };
 
@@ -1254,6 +1304,54 @@ function FinanceApp({
             <section className="panel">
               <div className="panel-heading">
                 <div>
+                  <h2>Manage Categories</h2>
+                  <p>Rename income and expense categories. Existing transactions update automatically.</p>
+                </div>
+                <Pencil size={22} />
+              </div>
+              <h3 className="subheading">Expense Categories</h3>
+              <div className="business-list">
+                {expenseCategoryList.map(category => (
+                  <div className="business-item" key={`expense-${category}`}>
+                    {editingCategory?.type === 'expense' && editingCategory.original === category ? (
+                      <>
+                        <input className="field" value={editingCategoryName} onChange={e => setEditingCategoryName(e.target.value)} autoFocus />
+                        <button className="icon-button success" onClick={saveCategoryEdit} aria-label="Save category"><Check size={18} /></button>
+                        <button className="icon-button" onClick={() => setEditingCategory(null)} aria-label="Cancel category edit"><X size={18} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="business-item-name"><span>{category}</span></div>
+                        <button className="icon-button" onClick={() => startCategoryEdit('expense', category)} aria-label={`Edit ${category}`}><Pencil size={17} /></button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <h3 className="subheading">Income Categories</h3>
+              <div className="business-list">
+                {incomeCategoryList.map(category => (
+                  <div className="business-item" key={`income-${category}`}>
+                    {editingCategory?.type === 'income' && editingCategory.original === category ? (
+                      <>
+                        <input className="field" value={editingCategoryName} onChange={e => setEditingCategoryName(e.target.value)} autoFocus />
+                        <button className="icon-button success" onClick={saveCategoryEdit} aria-label="Save category"><Check size={18} /></button>
+                        <button className="icon-button" onClick={() => setEditingCategory(null)} aria-label="Cancel category edit"><X size={18} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="business-item-name"><span>{category}</span></div>
+                        <button className="icon-button" onClick={() => startCategoryEdit('income', category)} aria-label={`Edit ${category}`}><Pencil size={17} /></button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
                   <h2>Manage Accounts</h2>
                   <p>Add your cash or bank accounts</p>
                 </div>
@@ -1336,6 +1434,8 @@ function FinanceApp({
           setFormType={setFormType}
           businesses={businesses}
           accounts={accounts}
+          expenseCategories={expenseCategoryList}
+          incomeCategories={incomeCategoryList}
           onClose={() => {
             setShowForm(false);
             setEditingTx(null);
@@ -1455,6 +1555,8 @@ function TransactionModal({
   setFormType,
   businesses,
   accounts,
+  expenseCategories: expenseCategoryOptions,
+  incomeCategories: incomeCategoryOptions,
   onClose,
   onSubmit
 }: {
@@ -1463,6 +1565,8 @@ function TransactionModal({
   setFormType: (type: 'income' | 'expense') => void;
   businesses: Business[];
   accounts: Account[];
+  expenseCategories: string[];
+  incomeCategories: string[];
   onClose: () => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
 }) {
@@ -1543,8 +1647,8 @@ function TransactionModal({
               required
             >
               {(formType === 'expense'
-                ? expenseCategories
-                : incomeCategories
+                ? expenseCategoryOptions
+                : incomeCategoryOptions
               ).map(category => (
                 <option key={category} value={category}>
                   {category}
