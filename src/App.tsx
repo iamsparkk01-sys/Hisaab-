@@ -1022,7 +1022,7 @@ function FinanceApp({
                     <CartesianGrid strokeDasharray="3 3" stroke="#263449" />
                     <XAxis dataKey="label" stroke="#8290a5" />
                     <YAxis stroke="#8290a5" />
-                    <Tooltip formatter={(value: number | undefined) => money(value ?? 0)} />
+                    <Tooltip formatter={(value) => money(Number(value ?? 0))} />
                     <Area
                       type="monotone"
                       dataKey="balance"
@@ -1119,7 +1119,7 @@ function FinanceApp({
                     <CartesianGrid strokeDasharray="3 3" stroke="#263449" />
                     <XAxis dataKey="label" stroke="#8290a5" />
                     <YAxis stroke="#8290a5" />
-                    <Tooltip formatter={(value: number | undefined) => money(value ?? 0)} />
+                    <Tooltip formatter={(value) => money(Number(value ?? 0))} />
                     <Bar dataKey="income" fill="#36ce91" radius={[5, 5, 0, 0]} />
                     <Bar dataKey="expense" fill="#ff6878" radius={[5, 5, 0, 0]} />
                   </BarChart>
@@ -1157,7 +1157,7 @@ function FinanceApp({
                           />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number | undefined) => money(value ?? 0)} />
+                      <Tooltip formatter={(value) => money(Number(value ?? 0))} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
