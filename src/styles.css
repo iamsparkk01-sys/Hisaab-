@@ -394,3 +394,6 @@ select.field { color-scheme: dark; }
   .transaction-modal { padding: 17px; }
   .business-add-row .primary-button { padding: 10px; }
 }
+
+/* Active state uses the class emitted by NavButton in App.tsx. */
+.nav-button.active { color: #a9ceff; background: #1c3453; }
